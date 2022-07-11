@@ -14,6 +14,12 @@ prelude!();
 /// Default `tla2tools` jar name.
 pub const TLA2TOOLS_DEFAULT_NAME: &'static str = "tla2tools.jar";
 
+/// Default `apalache` name.
+pub const APALACHE_DEFAULT_NAME: &'static str = "apalache-mc";
+
+/// Default `apalache` path in the user directory.
+pub const APALACHE_DEFAULT_PATH: &'static str = "apalache/bin/apalache-mc";
+
 /// Reads the toolchain setup from the user's configuration directory.
 pub fn user_read<T>(action: impl FnOnce(&Toolchain) -> T) -> Res<T> {
     crate::glob::read_map(|conf| action(&conf.toolchain))
@@ -38,6 +44,7 @@ pub fn user_read<T>(action: impl FnOnce(&Toolchain) -> T) -> Res<T> {
 pub fn tla2tools() -> Res<io::PathBuf> {
     crate::glob::read_map(|conf| conf.toolchain.tla2tools.clone())
 }
+
 /// TLC command.
 ///
 /// Fails if the configuration is not loaded.
@@ -65,6 +72,11 @@ pub fn tla2tools() -> Res<io::PathBuf> {
 pub fn tlc_cmd() -> Res<io::Command> {
     crate::glob::read_map(|conf| conf.toolchain.tlc_cmd())
 }
+
+pub fn apalache_cmd() -> Res<io::Command> {
+    crate::glob::read_try_map(|conf| conf.toolchain.apalache_cmd())
+}
+
 /// Documentation `tla2tex` command.
 ///
 /// Fails if the configuration is not loaded.
@@ -98,21 +110,24 @@ pub fn tla2tex_cmd() -> Res<io::Command> {
 pub struct Toolchain {
     /// Path to the `tla2tools.jar` binary.
     pub tla2tools: io::PathBuf,
+    /// Path to the `apalache` binary.
+    pub apalache: Option<io::PathBuf>,
     /// TLC CLA from the user's config toml file.
     pub tlc_cla: crate::customl::TlcCla,
 }
 impl Toolchain {
     /// Default `tla2tools` jar name.
     pub const TLA2TOOLS_DEFAULT_NAME: &'static str = TLA2TOOLS_DEFAULT_NAME;
+    /// Default `apalache` name.
+    pub const APALACHE_DEFAULT_NAME: &'static str = "apalache";
 
     /// Serializes itself to TOML.
     pub fn ser_toml(&self, w: &mut impl io::Write) -> Res<()> {
-        writeln!(
-            w,
-            "[config]\ntla2tools = '{}'\n\n\
-            [tlc_cla]\n",
-            self.tla2tools.display()
-        )?;
+        writeln!(w, "[config]\ntla2tools = '{}'", self.tla2tools.display(),)?;
+        if let Some(path) = &self.apalache {
+            writeln!(w, "apalache = '{}'", path.display())?
+        }
+        writeln!(w, "\n\n[tlc_cla]\n")?;
         self.tlc_cla.ser_toml_file(w)?;
         writeln!(w)?;
 
@@ -121,9 +136,15 @@ impl Toolchain {
     /// Deserializes itself from TOML.
     pub fn de_toml(txt: &str) -> Res<Self> {
         let mut tla2tools = io::PathBuf::new();
+        let mut apalache = io::PathBuf::new();
         let mut tlc_cla = crate::customl::TlcCla::none();
-        customl::parse::config::user(txt, &mut tla2tools, &mut tlc_cla).map_err(Error::from)?;
-        Ok(Self { tla2tools, tlc_cla })
+        customl::parse::config::user(txt, &mut tla2tools, &mut apalache, &mut tlc_cla)
+            .map_err(Error::from)?;
+        Ok(Self {
+            tla2tools,
+            apalache: Some(apalache),
+            tlc_cla,
+        })
     }
 
     /// Attempts to build a toolchain configuration from the environment.
@@ -132,17 +153,19 @@ impl Toolchain {
     ///
     /// See also [`Self::from_env_with`].
     pub fn from_env() -> Res<Self> {
-        Self::from_env_with(Self::TLA2TOOLS_DEFAULT_NAME)
+        Self::from_env_with(Self::TLA2TOOLS_DEFAULT_NAME, Self::APALACHE_DEFAULT_NAME)
     }
     /// Attempts to build a toolchain configuration from the environment and a custom command.
     ///
     /// See also [`Self::from_env`].
-    pub fn from_env_with(tla2tools_cmd: impl AsRef<io::OsStr>) -> Res<Self> {
+    pub fn from_env_with(
+        tla2tools_cmd: impl AsRef<io::Path>,
+        apalache_cmd: impl AsRef<io::Path>,
+    ) -> Res<Self> {
         let tla2tools_cmd = tla2tools_cmd.as_ref();
         let tla2tools = {
-            let cmd_path: &io::Path = tla2tools_cmd.as_ref();
-            if cmd_path.exists() {
-                cmd_path.to_path_buf()
+            if tla2tools_cmd.exists() {
+                tla2tools_cmd.to_path_buf()
             } else {
                 which::which(tla2tools_cmd).with_context(|| {
                     anyhow!(
@@ -152,9 +175,18 @@ impl Toolchain {
                 })?
             }
         };
+        let apalache_cmd = apalache_cmd.as_ref();
+        let apalache = {
+            if apalache_cmd.exists() || which::which(apalache_cmd).is_err() {
+                Some(apalache_cmd.to_path_buf())
+            } else {
+                None
+            }
+        };
 
         Ok(Self {
             tla2tools,
+            apalache: apalache,
             tlc_cla: crate::customl::TlcCla::default(),
         })
     }
@@ -177,6 +209,18 @@ impl Toolchain {
     /// Mutable accessor to [`Self::tlc_cla`].
     pub fn tlc_cla_mut(&mut self) -> &mut crate::customl::TlcCla {
         &mut self.tlc_cla
+    }
+
+    /// Plain apalache command with no arguments.
+    ///
+    /// - fails if `self.apalache` is `None`.
+    pub fn apalache_cmd(&self) -> Res<io::Command> {
+        match self.apalache.as_ref() {
+            Some(cmd) => Ok(io::Command::new(cmd)),
+            None => {
+                bail!("don't know how to call apalache, consider providing the path to the binary")
+            }
+        }
     }
 
     /// Command for calling TLC.

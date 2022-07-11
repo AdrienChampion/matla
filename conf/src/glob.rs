@@ -47,11 +47,15 @@ pub fn read<'a>() -> sync::ReadRes<'a, Option<Conf>> {
 /// - the configuration is not set;
 /// - the configuration lock is poisoned.
 pub fn read_map<T>(action: impl FnOnce(&Conf) -> T) -> Res<T> {
+    read_try_map(|conf| Ok(action(conf)))
+}
+/// Same as [`read_map`] but the action can fail.
+pub fn read_try_map<T>(action: impl FnOnce(&Conf) -> Res<T>) -> Res<T> {
     read().and_then(|opt| {
         let conf = opt
             .as_ref()
             .ok_or_else(|| anyhow!("cannot retrieve `tlc_path`, configuration is not set"))?;
-        Ok(action(conf))
+        action(conf)
     })
 }
 

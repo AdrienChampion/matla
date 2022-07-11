@@ -1,6 +1,6 @@
 > matla test encoding_2
 # 2
-Error: failure during test
+Error: mode test failed
 
 Caused by:
     0: failed to load integration tests

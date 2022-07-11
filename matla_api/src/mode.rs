@@ -1,5 +1,6 @@
 //! Aggregates matla's run-modes.
 
+pub mod apalache;
 pub mod clean;
 pub mod init;
 pub mod run;
@@ -18,7 +19,7 @@ mod requires_clap {
     prelude!();
 
     /// Generates all the subcommands for all the modes.
-    pub fn all_subcommands<'a>() -> [clap::Command<'static>; 8] {
+    pub fn all_subcommands<'a>() -> [clap::Command<'static>; 9] {
         [
             super::clean::cla::subcommand(),
             super::init::cla::subcommand(),
@@ -26,6 +27,7 @@ mod requires_clap {
             super::setup::cla::subcommand(),
             super::testing::cla::subcommand(),
             super::tlc::cla::subcommand(),
+            super::apalache::cla::subcommand(),
             super::uninstall::cla::subcommand(),
             super::update::cla::subcommand(),
         ]
@@ -50,7 +52,7 @@ mod requires_clap {
                 setup.context("setup mode initialization failed")
             };
             wrap_try! {
-                setup.launch().context("failure during setup")
+                setup.launch().context("mode setup failed")
             }
             Some(Ok(None))
         } else if let Some(uninstall) = mode::uninstall::cla::check_matches(&matches) {
@@ -58,7 +60,7 @@ mod requires_clap {
                 uninstall.context("uninstall mod initialization failed")
             };
             wrap_try! {
-                uninstall.launch().context("failure during uninstall")
+                uninstall.launch().context("mode uninstall failed")
             }
             Some(Ok(None))
         } else {
@@ -72,28 +74,38 @@ mod requires_clap {
     pub fn try_pre_project_load(matches: &clap::ArgMatches) -> Option<Res<Option<i32>>> {
         if let Some(init) = mode::init::cla::check_matches(&matches) {
             let init = wrap_try! {
-                init.context("init mod initialization failed")
+                init.context("init mode initialization failed")
             };
             wrap_try! {
-                init.launch().context("failure during init")
+                init.launch().context("mode init failed")
             }
             Some(Ok(None))
         } else if let Some(update) = mode::update::cla::check_matches(&matches) {
             let update = wrap_try! {
-                update.context("update mod initialization failed")
+                update.context("update mode initialization failed")
             };
             wrap_try! {
-                update.launch().context("failure during update")
+                update.launch().context("mode update failed")
             }
             Some(Ok(None))
         } else if let Some(tlc) = mode::tlc::cla::check_matches(&matches) {
             let tlc = wrap_try! {
-                tlc.context("tlc mod initialization failed")
+                tlc.context("tlc mode initialization failed")
             };
             let exit_code = wrap_try! {
-                wrap_try!(tlc.launch().context("failure during tlc"))
+                wrap_try!(tlc.launch().context("mode tlc failed"))
                     .code()
                     .ok_or_else(|| anyhow!("failed to retrieve exit code of TLC process"))
+            };
+            Some(Ok(Some(exit_code)))
+        } else if let Some(apalache) = mode::apalache::cla::check_matches(&matches) {
+            let apalache = wrap_try! {
+                apalache.context("apalache mode initialization failed")
+            };
+            let exit_code = wrap_try! {
+                wrap_try!(apalache.launch().context("mode apalache failed"))
+                    .code()
+                    .ok_or_else(|| anyhow!("failed to retrieve exit code of Apalache process"))
             };
             Some(Ok(Some(exit_code)))
         } else {
@@ -107,26 +119,26 @@ mod requires_clap {
     pub fn try_post_loading(matches: &clap::ArgMatches) -> Option<Res<Option<i32>>> {
         if let Some(run) = mode::run::cla::check_matches(&matches) {
             let run = wrap_try! {
-                run.context("run mod initialization failed")
+                run.context("run mode initialization failed")
             };
             let exit_code = wrap_try! {
-                run.launch().context("failure during run")
+                run.launch().context("mode run failed")
             };
             Some(Ok(Some(exit_code)))
         } else if let Some(test) = mode::testing::cla::check_matches(&matches) {
             let test = wrap_try! {
-                test.context("test mod initialization failed")
+                test.context("test mode initialization failed")
             };
             wrap_try! {
-                test.launch().context("failure during test")
+                test.launch().context("mode test failed")
             }
             Some(Ok(None))
         } else if let Some(clean) = mode::clean::cla::check_matches(&matches) {
             let clean = wrap_try! {
-                clean.context("clean mod initialization failed")
+                clean.context("clean mode initialization failed")
             };
             wrap_try! {
-                clean.launch().context("failure during clean")
+                clean.launch().context("mode clean failed")
             }
             Some(Ok(None))
         } else {

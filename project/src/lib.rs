@@ -707,6 +707,21 @@ impl SourceProject {
         FullProject::new(entry, target_conf, self, conf, target, tlc_cla)
     }
 
+    /// Builds a full apalache project.
+    ///
+    /// This involves creating a second, target project where the build/run/doc/test-ing will take
+    /// place. Everything is synchronized, *i.e.* files from the `self` (user) project have been
+    /// synchronized with the ones in the target project.
+    ///
+    /// See [`Self::to_target`] for more details.
+    pub fn into_full_apalache(self, target_conf: conf::Target) -> Res<ApalacheFullProject> {
+        let target = &target_conf.build_path;
+        let release = target_conf.release;
+        let target = self.to_target(target, release)?;
+        let conf = self.load_toml_config()?;
+        ApalacheFullProject::new(target_conf, self, conf, target)
+    }
+
     /// Copies project to a target directory and yields the corresponding target project.
     ///
     /// - Recursively creates the target directory if needed.
@@ -836,18 +851,18 @@ pub struct FullProject {
     pub target: TargetProject,
 }
 impl FullProject {
-    /// Constructor.
-    fn new(
+    /// Internal constructor, does not validate the runnable module.
+    ///
+    /// Used by [`ApalacheProject`], which makes sure `self.actual_entry` is never used.
+    fn new_unvalidated(
         entry: Option<String>,
+        actual_entry: String,
         target_conf: conf::Target,
         source: SourceProject,
         config: conf::Project,
         target: TargetProject,
         tlc_cla: Option<&conf::customl::TlcCla>,
     ) -> Res<(Self, conf::customl::TlcCla)> {
-        let actual_entry = source
-            .validate_runnable_module(entry.as_ref().map(|s| s as &str))?
-            .into();
         let tlc_cla = {
             let mut res = conf::toolchain::user_read(|chain| chain.tlc_cla.clone())?;
             // println!("user TLC CLA:\n{:#?}", res);
@@ -873,6 +888,29 @@ impl FullProject {
             },
             tlc_cla,
         ))
+    }
+
+    /// Constructor.
+    fn new(
+        entry: Option<String>,
+        target_conf: conf::Target,
+        source: SourceProject,
+        config: conf::Project,
+        target: TargetProject,
+        tlc_cla: Option<&conf::customl::TlcCla>,
+    ) -> Res<(Self, conf::customl::TlcCla)> {
+        let actual_entry = source
+            .validate_runnable_module(entry.as_ref().map(|s| s as &str))?
+            .into();
+        Self::new_unvalidated(
+            entry,
+            actual_entry,
+            target_conf,
+            source,
+            config,
+            target,
+            tlc_cla,
+        )
     }
 
     /// Source TLA file from a module name.
@@ -915,6 +953,11 @@ impl FullProject {
         } else {
             bail!("cannot run TLC on unknown module `{}`", module)
         }
+    }
+
+    /// Generates a full apalache command.
+    pub fn full_apalache_cmd(&self) -> Res<io::Command> {
+        self.target_conf.custom_apalache_cmd()
     }
 
     /// Runs TLC on a module.
@@ -987,5 +1030,39 @@ impl FullProject {
         self.load_module(module, &mut buf)?;
         buf.shrink_to_fit();
         Ok(buf)
+    }
+}
+
+/// Wraps a [`FullProject`] only for running custom apalache commands.
+///
+/// The inner `FullProject` might not be legal, in that its `actual_entry` (module to run) has not
+/// been validated. It's okay as this wrapper ignores it anyways.
+#[derive(Debug, Clone)]
+pub struct ApalacheFullProject {
+    project: FullProject,
+}
+impl ApalacheFullProject {
+    /// Constructor.
+    fn new(
+        target_conf: conf::Target,
+        source: SourceProject,
+        config: conf::Project,
+        target: TargetProject,
+    ) -> Res<Self> {
+        FullProject::new_unvalidated(
+            None,
+            "<none>".into(),
+            target_conf,
+            source,
+            config,
+            target,
+            None,
+        )
+        .map(|(project, _)| ApalacheFullProject { project })
+    }
+
+    /// Generates a full apalache command for this project.
+    pub fn full_apalache_cmd(&self) -> Res<io::Command> {
+        self.project.full_apalache_cmd()
     }
 }

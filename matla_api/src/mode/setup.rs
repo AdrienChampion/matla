@@ -53,6 +53,28 @@ pub mod cla {
 pub const TLA_TOOLBOX_URL: &str =
     "https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar";
 
+/// URL for the latest release of Apalache.
+pub const APALACHE_TOOLBOX_URL: &str =
+    "https://github.com/informalsystems/apalache/releases/latest/download/apalache.zip";
+
+/// Downloads a zip file and extracts its content to an **existing** directory.
+///
+/// - `before_unzip` will run after the download but before unzipping.
+pub fn dl_unzip(url: &str, dir: impl AsRef<io::Path>, before_unzip: impl FnOnce()) -> Res<()> {
+    let content = io::download(url)?
+        .bytes()
+        .with_context(|| format!("accessing the content of `{}`", url))?;
+    before_unzip();
+    {
+        use zip::ZipArchive;
+        let mut zip = ZipArchive::new(std::io::Cursor::new(content.as_ref()))
+            .with_context(|| format!("loading `{}` as a zip archive", url))?;
+        zip.extract(dir)
+            .with_context(|| format!("extracting `{}`", url))?;
+    }
+    Ok(())
+}
+
 /// Runs setup mode.
 #[readonly]
 #[derive(Debug, Clone)]
@@ -63,6 +85,8 @@ pub struct Run {
     pub toml_path: io::PathBuf,
     /// Path to the tla2tools jar (only for standalone mode).
     pub tla2tools_jar_path: io::PathBuf,
+    /// Path to the apalache binary (only for standalone mode).
+    pub apalache_path: io::PathBuf,
     /// If true, download latest TLA toolbox and use that.
     pub standalone: bool,
     /// If true, retrieve TLA toolbox from environment.
@@ -86,6 +110,7 @@ impl Run {
             conf_dir: conf::user::conf_path()?,
             toml_path: conf::user::toml_path()?,
             tla2tools_jar_path: conf::user::tla2tools_jar_path()?,
+            apalache_path: conf::user::apalache_path()?,
             standalone,
             from_env,
             overwrite,
@@ -234,7 +259,7 @@ impl Run {
             let download = io::ask_closed(
                 Self::PREF,
                 format!(
-                    "Download the tla2tools to `{}`? \
+                    "Download tla2tools (and Apalache) to `{}`? \
                     If not, matla will attempt to find it in your path",
                     self.conf_dir.display(),
                 ),
@@ -256,6 +281,7 @@ impl Run {
     /// Setup for the toolchain inferred from the environment.
     fn toolchain_from_env(&self) -> Res<Option<conf::Toolchain>> {
         let tla2tools_cmd = conf::toolchain::TLA2TOOLS_DEFAULT_NAME;
+        let apalache_cmd = conf::toolchain::APALACHE_DEFAULT_NAME;
         match conf::Toolchain::from_env() {
             Ok(conf) => {
                 println!(
@@ -281,7 +307,7 @@ impl Run {
                         tla2tools_cmd,
                     ),
                     |path| {
-                        self.toolchain_from_env_with(path)
+                        self.toolchain_from_env_with(path, apalache_cmd)
                             .map_err(|e| e.to_string())
                     },
                 )?;
@@ -292,19 +318,24 @@ impl Run {
     }
 
     /// Toolchain config setup with a custom command.
-    fn toolchain_from_env_with(&self, cmd: impl AsRef<io::Path>) -> Res<conf::Toolchain> {
-        let cmd = io::PathBuf::from(cmd.as_ref());
-        conf::Toolchain::from_env_with(&cmd).with_context(|| {
+    fn toolchain_from_env_with(
+        &self,
+        toolchain: impl AsRef<io::Path>,
+        apalache: impl AsRef<io::Path>,
+    ) -> Res<conf::Toolchain> {
+        let toolchain = toolchain.as_ref();
+        let apalache = apalache.as_ref();
+        conf::Toolchain::from_env_with(&toolchain, &apalache).with_context(|| {
             format!(
                 "failed to retrieve TLA toolchain from environment with `{}`",
-                cmd.display(),
+                toolchain.display(),
             )
         })
     }
 
     /// Toolchain config setup, standalone mode.
     ///
-    /// Downloads the TLA toolbox to [`Self::tla2tools_jar_path`].
+    /// Downloads the TLA toolbox and Apalache to [`Self::tla2tools_jar_path`].
     fn toolchain_download(&self) -> Res<Option<conf::Toolchain>> {
         if self.tla2tools_jar_path.is_dir() {
             bail!(
@@ -334,14 +365,14 @@ impl Run {
             )
         }
 
-        self.toolchain_from_env_with(&self.tla2tools_jar_path)
+        self.toolchain_from_env_with(&self.tla2tools_jar_path, &self.apalache_path)
             .map(Some)
     }
 
-    /// Updates the tla2tool jar in the user directory.
+    /// Updates the tla2tool jar and Apalache in the user directory.
     pub fn update_toolbox(&self) -> Res<()> {
         println!(
-            "{}Downloading toolbox from `{}`...",
+            "{}Downloading TLA⁺ toolbox from `{}`...",
             Self::PREF,
             TLA_TOOLBOX_URL,
         );
@@ -376,6 +407,20 @@ impl Run {
                 body_byte_count,
             )
         }
+
+        println!("{}", Self::PREF);
+        println!(
+            "{}Downloading Apalache (for typechecking) from `{}`...",
+            Self::PREF,
+            APALACHE_TOOLBOX_URL,
+        );
+        dl_unzip(APALACHE_TOOLBOX_URL, &self.conf_dir, || {
+            println!(
+                "{}Extracting Apalache binary to `{}`",
+                Self::PREF,
+                self.conf_dir.display(),
+            )
+        })?;
 
         Ok(())
     }

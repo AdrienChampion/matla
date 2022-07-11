@@ -152,6 +152,8 @@ pub const MATLA_CONF_SUBDIR: &str = "matla";
 pub const MATLA_CONF_FILE: &str = "matla.toml";
 /// TLA toolbox jar file.
 pub const TLA2TOOLS_FILE: &str = crate::toolchain::TLA2TOOLS_DEFAULT_NAME;
+/// Apalache binary.
+pub const APALACHE_FILE: &str = crate::toolchain::APALACHE_DEFAULT_NAME;
 
 /// Path to the `tla2tools` jar in the user's config directory.
 ///
@@ -178,6 +180,15 @@ pub fn tla2tools_jar_path() -> Res<io::PathBuf> {
     let mut tla2tools = conf_path()?;
     tla2tools.push(TLA2TOOLS_FILE);
     Ok(tla2tools)
+}
+
+/// Path to the `apalache` binary in the user's config directory.
+///
+/// Fails if the home directory cannot be retrieved.
+pub fn apalache_path() -> Res<io::PathBuf> {
+    let mut apalache = conf_path()?;
+    apalache.push(toolchain::APALACHE_DEFAULT_PATH);
+    Ok(apalache)
 }
 
 /// Writes to the user configuration file.

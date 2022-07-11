@@ -119,18 +119,22 @@ peg::parser! {
         = "[" _ "tlc_cla" _ "]" _ sub_tlc_cla(source, tlc_cla)
 
         // Parses the toolchain part of a user's config.
-        rule section_toolchain(target: &mut io::PathBuf)
-        = "[" _ "config" _ "]" _
-        "tla2tools" _ "=" _ "'" path:$([^'\'']*) "'" {
-            *target = path.into();
+        rule section_toolchain(toolchain: &mut io::PathBuf, apalache : &mut io::PathBuf)
+        = "[" _ "config" _ "]"
+        _ "tla2tools" _ "=" _ "'" tla_path:$([^'\'']*) "'"
+        _ "apalache" _ "=" _ "'" apa_path:$([^'\'']*) "'"
+        {
+            *toolchain = tla_path.into();
+            *apalache = apa_path.into();
         }
         // Parses the config part of a project's config
         rule section_project()
         = "[" _ "project" _ "]"
 
         // Parses the user's toml config file.
-        pub rule user(path: &mut io::PathBuf, tlc_cla: &mut TlcClaToml)
-        = _ section_toolchain(path) _ section_tlc_cla((customl::Source::User), tlc_cla) _
+        pub rule user(toolchain: &mut io::PathBuf, apalache : &mut io::PathBuf, tlc_cla: &mut TlcClaToml)
+        = _ section_toolchain(toolchain, apalache)
+        _ section_tlc_cla((customl::Source::User), tlc_cla) _
 
         // Parses the project's toml config file.
         pub rule project(tlc_cla: &mut TlcClaToml)

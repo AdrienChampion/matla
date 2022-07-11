@@ -29,6 +29,8 @@ pub struct Target {
     pub build_path: io::PathBuf,
     /// TLC metadir path.
     pub metadir_path: io::PathBuf,
+    /// Apalache metadir path.
+    pub apalache_metadir_path: io::PathBuf,
 }
 impl Target {
     /// Constructor for a run target.
@@ -79,12 +81,18 @@ impl Target {
             path.push("tlc_meta");
             path
         };
+        let apalache_metadir_path = {
+            let mut path = build_path.clone();
+            path.push("apalache_meta");
+            path
+        };
         Self {
             release,
             project_path,
             target_path,
             build_path,
             metadir_path,
+            apalache_metadir_path,
         }
     }
 
@@ -165,6 +173,30 @@ impl Target {
         self.tlc_cmd(&crate::TlcCla::default())
     }
 
+    /// An apalache command for this project.
+    pub fn custom_apalache_cmd(&self) -> Res<io::Command> {
+        let mut cmd = toolchain::apalache_cmd()?;
+        let cmd_working_dir = io::try_canonicalize(&self.build_path, false)?;
+        cmd.current_dir(cmd_working_dir);
+        // println!(
+        //     "cmd current dir: `{}`",
+        //     cmd.get_current_dir().unwrap().display(),
+        // );
+        let metadir = self.apalache_metadir_path.file_name().ok_or_else(|| {
+            anyhow!(
+                "failed to retrieve directory name of `{}`",
+                self.apalache_metadir_path.display()
+            )
+        })?;
+        cmd.arg({
+            let mut arg = std::ffi::OsString::new();
+            arg.push("--out-dir=");
+            arg.push(metadir);
+            arg
+        });
+        Ok(cmd)
+    }
+
     /// Constructor for a test project.
     ///
     /// - `sub_dir`: name of the test sub-directory unique to the test this project is for.
@@ -225,12 +257,18 @@ impl Target {
             path.push("tlc_meta");
             path
         };
+        let apalache_metadir_path = {
+            let mut path = build_path.clone();
+            path.push("apalache_meta");
+            path
+        };
         Self {
             release,
             project_path,
             target_path,
             build_path,
             metadir_path,
+            apalache_metadir_path,
         }
     }
 
@@ -281,12 +319,18 @@ impl Target {
             path.push("tlc_meta");
             path
         };
+        let apalache_metadir_path = {
+            let mut path = build_path.clone();
+            path.push("apalache_meta");
+            path
+        };
         Self {
             release: false,
             project_path,
             target_path,
             build_path,
             metadir_path,
+            apalache_metadir_path,
         }
     }
 }
