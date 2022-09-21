@@ -1,0 +1,30 @@
+> matla run philo
+# 20
+Error: parse error on file `./philo.tla`
+- expected [??], encountered `IN` and `\\`
+  ./philo.tla at 7:11
+        |
+      7 | ASSUME N \IN Nat
+        |           ^~~~~~ here
+- while parsing
+  ./philo.tla at 7:11
+        |
+      7 | ASSUME N \IN Nat
+        |           ^~~~~~ ExtendableExpr
+  ./philo.tla at 7:8
+        |
+      7 | ASSUME N \IN Nat
+        |        ^~~~~~ ExtendableExpr
+  ./philo.tla at 7:8
+        |
+      7 | ASSUME N \IN Nat
+        |        ^~~~~~ Expression
+  ./philo.tla at 7:1
+        |
+      7 | ASSUME N \IN Nat
+        | ^~~~~~ Assumption
+  ./philo.tla at 5:1
+        |
+      5 | CONSTANT N
+        | ^~~~~~ module body start
+specification is ill-defined
