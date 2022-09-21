@@ -62,9 +62,23 @@ peg::parser! {
             }
         } / expected!("`usize` value")
 
-        rule dq_string() -> &'input str
+        /// Parses a quoted string.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use project::tlc::parse::dq_string;
+        /// let input = r#""IN""#;
+        /// let res = dq_string(input).unwrap();
+        /// assert_eq!(res, "IN");
+        ///
+        /// let input = r#""\\""#;
+        /// let res = dq_string(input).unwrap();
+        /// assert_eq!(res, "\\\\");
+        /// ```
+        pub rule dq_string() -> &'input str
         = quiet! {
-            "\"" content:$(("\\\"" / [^'"'])*) "\"" { content }
+            "\"" content:$(("\\\"" / "\\\\" / [^'"'])*) "\"" { content }
         } / expected!("double-quoted string")
 
         rule file_or_dir() -> &'input str
