@@ -15,6 +15,8 @@ pub enum TlcError {
         errs: Vec<TlcError>,
     },
     Warning(tlc::warn::TlcWarning),
+    /// A TLC-level error that matla does not recognize natively.
+    Other(tlc::msg::Msg),
 }
 implem! {
     for TlcError {
@@ -85,6 +87,14 @@ impl TlcError {
                 }
                 Ok(res)
             }
+            Self::Other(msg) => {
+                let mut lines = vec![format!(
+                    "Unexpected {} at TLC-level",
+                    styles.fatal.paint("error")
+                )];
+                lines.extend(msg.to_string().lines().map(|s| s.into()));
+                Ok(lines)
+            }
         }
     }
 
@@ -98,6 +108,7 @@ impl TlcError {
             | Self::Semantic(_)
             | Self::Lexical(_)
             | Self::Run(_)
+            | Self::Other(_)
             | Self::Tlc(_) => false,
         }
     }
@@ -131,6 +142,11 @@ impl TlcError {
                 }
                 None
             }
+            Self::Other(msg) => Some(FailedOutcome::Plain(if let Some(code) = msg.code() {
+                format!("TLC produced an unexpected error: {}", code.desc())
+            } else {
+                format!("TLC produced an unexpected error")
+            })),
         }
     }
 
@@ -209,7 +225,7 @@ impl TlcError {
                     .collect();
                 Self::List { during, errs }
             }
-            Self::NoJavaRuntime | Self::Run(_) | Self::Tlc(_) => self,
+            Self::NoJavaRuntime | Self::Run(_) | Self::Tlc(_) | Self::Other(_) => self,
         }
     }
 
